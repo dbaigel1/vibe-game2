@@ -6,6 +6,7 @@ export interface Card {
   id: string;
   type: CardType;
   value: number;
+  description: string;
 }
 
 export interface ShopCard {
@@ -15,13 +16,8 @@ export interface ShopCard {
 }
 
 export interface Unit {
-  id: string;
-  type: "soldier" | "miner";
-  position: {
-    x: number;
-    y: number;
-  };
-  owner: "player1" | "player2";
+  type: "miner" | "soldier";
+  position: Position;
 }
 
 export interface Player {
@@ -32,11 +28,14 @@ export interface Player {
   money: number;
   base: {
     health: number;
-    position: {
-      x: number;
-      y: number;
-    };
+    position: Position;
   };
+  units: Unit[];
+}
+
+export interface Position {
+  row: number;
+  col: number;
 }
 
 export interface GameState {
@@ -44,9 +43,13 @@ export interface GameState {
     player1: Player;
     player2: Player;
   };
-  board: Unit[];
   currentTurn: "player1" | "player2";
-  shop: ShopCard[];
   selectedCards: Card[];
   selectedShopCard: ShopCard | null;
+  selectedUnit: {
+    position: Position;
+    type: "miner" | "soldier";
+  } | null;
+  selectedMoveCards: Card[];
+  shop: ShopCard[];
 }

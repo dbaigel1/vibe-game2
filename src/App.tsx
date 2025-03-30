@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { GameBoard } from "./components/GameBoard";
-import { Shop } from "./components/Shop";
-import { Hand } from "./components/Hand";
+import styled from "@emotion/styled";
+import { GameState, Card, ShopCard } from "./types/game";
 import {
   initializeGame,
   drawCardsForTurn,
@@ -10,37 +9,68 @@ import {
   selectShopCard,
   deselectShopCard,
   purchaseCard,
+  selectMoveCard,
+  deselectMoveCard,
 } from "./utils/gameUtils";
-import { ShopCard, GameState, Player, Card } from "./types/game";
-import styled from "@emotion/styled";
+import { GameBoard } from "./components/GameBoard";
+import { Hand } from "./components/Hand";
+import { Shop } from "./components/Shop";
 
-const GameContainer = styled.div`
+const AppContainer = styled.div`
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 20px;
-  padding: 20px;
 `;
 
-const TurnIndicator = styled.div<{ currentTurn: "player1" | "player2" }>`
-  font-size: 1.5em;
-  font-weight: bold;
-  color: ${(props) =>
-    props.currentTurn === "player1" ? "#44ff44" : "#4444ff"};
-`;
-
-const DeckCount = styled.div`
-  font-size: 1.2em;
-  color: #666;
+const GameInfo = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: #f5f5f5;
+  border-radius: 5px;
 `;
 
 const PlayerInfo = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px;
-  background: #f5f5f5;
+  align-items: center;
+  gap: 20px;
+`;
+
+const Money = styled.div`
+  font-size: 1.2em;
+  font-weight: bold;
+  color: #2e7d32;
+`;
+
+const TurnIndicator = styled.div<{ isPlayer1: boolean }>`
+  font-size: 1.2em;
+  font-weight: bold;
+  color: ${(props) => (props.isPlayer1 ? "#1976d2" : "#d32f2f")};
+`;
+
+const Button = styled.button`
+  padding: 10px 20px;
+  font-size: 1em;
+  background-color: #1976d2;
+  color: white;
+  border: none;
   border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #1565c0;
+  }
+
+  &:disabled {
+    background-color: #bdbdbd;
+    cursor: not-allowed;
+  }
 `;
 
 const GameLayout = styled.div`
@@ -49,32 +79,11 @@ const GameLayout = styled.div`
   align-items: flex-start;
 `;
 
-const Title = styled.h1`
-  font-size: 2em;
-  font-weight: bold;
-  margin-bottom: 20px;
-`;
-
-const Button = styled.button`
-  padding: 10px 20px;
-  font-size: 1em;
-  background-color: #44ff44;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-
-  &:hover {
-    background-color: #33cc33;
-  }
-`;
-
-const App = () => {
+const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(initializeGame());
 
   const handleStartTurn = () => {
-    // First, draw cards for the current player
+    // First draw cards for the current player
     const stateWithNewCards = drawCardsForTurn(gameState);
 
     // Then switch turns
@@ -83,88 +92,74 @@ const App = () => {
       currentTurn: gameState.currentTurn === "player1" ? "player2" : "player1",
       selectedCards: [], // Clear selected cards
       selectedShopCard: null, // Clear selected shop card
+      selectedUnit: null, // Clear selected unit
+      selectedMoveCards: [], // Clear selected move cards
     };
 
     setGameState(newState);
   };
 
-  const handleCardSelect = (cardIndex: number) => {
-    const currentPlayer = gameState.players[gameState.currentTurn];
-    const card = currentPlayer.hand[cardIndex];
-    if (card && card.type === "money") {
-      const newState = selectCard(gameState, card.id);
-      setGameState(newState);
+  const handleCardClick = (card: Card) => {
+    if (card.type === "move") {
+      // If it's already selected, deselect it
+      if (gameState.selectedMoveCards.some((c) => c.id === card.id)) {
+        setGameState(deselectMoveCard(gameState, card));
+      } else {
+        // Otherwise select it
+        setGameState(selectMoveCard(gameState, card));
+      }
+    } else if (card.type === "money") {
+      // If it's already selected, deselect it
+      if (gameState.selectedCards.some((c) => c.id === card.id)) {
+        setGameState(deselectCard(gameState, card.id));
+      } else {
+        // Otherwise select it
+        setGameState(selectCard(gameState, card.id));
+      }
     }
   };
 
-  const handleCardDeselect = (cardIndex: number) => {
-    const currentPlayer = gameState.players[gameState.currentTurn];
-    const card = currentPlayer.hand[cardIndex];
-    if (card) {
-      const newState = deselectCard(gameState, card.id);
-      setGameState(newState);
-    }
-  };
-
-  const handleShopCardSelect = (card: ShopCard) => {
-    const newState = selectShopCard(gameState, card);
-    setGameState(newState);
-  };
-
-  const handleShopCardDeselect = () => {
-    const newState = deselectShopCard(gameState);
-    setGameState(newState);
+  const handleShopCardClick = (shopCard: ShopCard) => {
+    setGameState(selectShopCard(gameState, shopCard));
   };
 
   const handlePurchase = () => {
-    const newState = purchaseCard(gameState);
-    setGameState(newState);
+    setGameState(purchaseCard(gameState));
   };
 
   const currentPlayer = gameState.players[gameState.currentTurn];
-  const selectedMoney = gameState.selectedCards.reduce((total, card) => {
-    return total + (card.type === "money" ? 1 : 0);
-  }, 0);
+  const isPlayer1 = gameState.currentTurn === "player1";
 
   return (
-    <GameContainer>
-      <Title>Vibe Game</Title>
-      <TurnIndicator currentTurn={gameState.currentTurn}>
-        Current Turn:{" "}
-        {gameState.currentTurn === "player1" ? "Player 1" : "Player 2"}
-      </TurnIndicator>
-
-      <Hand
-        cards={currentPlayer.hand}
-        selectedCards={gameState.selectedCards}
-        onSelect={handleCardSelect}
-        onDeselect={handleCardDeselect}
-      />
+    <AppContainer>
+      <GameInfo>
+        <PlayerInfo>
+          <TurnIndicator isPlayer1={isPlayer1}>
+            {isPlayer1 ? "Player 1's Turn" : "Player 2's Turn"}
+          </TurnIndicator>
+          <Money>Money: {currentPlayer.money}</Money>
+        </PlayerInfo>
+        <Button onClick={handleStartTurn}>End Turn</Button>
+      </GameInfo>
 
       <GameLayout>
-        <GameBoard gameState={gameState} />
+        <GameBoard gameState={gameState} onGameStateChange={setGameState} />
         <Shop
           cards={gameState.shop}
-          selectedShopCard={gameState.selectedShopCard}
-          selectedMoney={selectedMoney}
-          onSelect={handleShopCardSelect}
-          onDeselect={handleShopCardDeselect}
+          onCardClick={handleShopCardClick}
+          selectedCard={gameState.selectedShopCard}
           onPurchase={handlePurchase}
+          selectedMoneyCards={gameState.selectedCards}
         />
       </GameLayout>
 
-      <PlayerInfo>
-        <div>
-          Current Player:{" "}
-          {gameState.currentTurn === "player1" ? "Player 1" : "Player 2"}
-        </div>
-        <div>Money: {currentPlayer.money}</div>
-        <div>Deck: {currentPlayer.deck.length} cards</div>
-        <div>Discarded: {currentPlayer.discarded.length} cards</div>
-      </PlayerInfo>
-
-      <Button onClick={handleStartTurn}>End Turn</Button>
-    </GameContainer>
+      <Hand
+        cards={currentPlayer.hand}
+        onCardClick={handleCardClick}
+        selectedCards={gameState.selectedCards}
+        selectedMoveCards={gameState.selectedMoveCards}
+      />
+    </AppContainer>
   );
 };
 

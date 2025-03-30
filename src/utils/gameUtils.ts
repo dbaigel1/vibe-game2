@@ -6,6 +6,7 @@ import {
   Player,
   ShopCard,
   CardType,
+  Position,
 } from "../types/game";
 
 const createCard = (
@@ -15,6 +16,14 @@ const createCard = (
   id: `${type}-${Math.random().toString(36).substr(2, 9)}`,
   type,
   value,
+  description:
+    type === "money"
+      ? "Add money to your hand"
+      : type === "move"
+      ? "Move a unit one space"
+      : type === "soldier"
+      ? "Add a new soldier unit"
+      : "Upgrade a unit's stats",
 });
 
 const createShopCard = (
@@ -55,31 +64,16 @@ const createInitialDeck = (): Card[] => {
   return shuffleArray(deck);
 };
 
-const createInitialUnits = (): Unit[] => {
+const createInitialUnits = (playerId: "player1" | "player2"): Unit[] => {
+  const isPlayer1 = playerId === "player1";
   return [
     {
-      id: "soldier-1",
       type: "soldier",
-      position: { x: 1, y: 5 },
-      owner: "player1",
+      position: { row: isPlayer1 ? 0 : GRID_SIZE - 1, col: 2 },
     },
     {
-      id: "miner-1",
       type: "miner",
-      position: { x: 2, y: 5 },
-      owner: "player1",
-    },
-    {
-      id: "soldier-2",
-      type: "soldier",
-      position: { x: 10, y: 6 },
-      owner: "player2",
-    },
-    {
-      id: "miner-2",
-      type: "miner",
-      position: { x: 9, y: 6 },
-      owner: "player2",
+      position: { row: isPlayer1 ? 0 : GRID_SIZE - 1, col: 3 },
     },
   ];
 };
@@ -126,8 +120,9 @@ export const initializeGame = (): GameState => {
         money: 0,
         base: {
           health: 20,
-          position: { x: 0, y: 5 },
+          position: { row: 0, col: 0 },
         },
+        units: createInitialUnits("player1"),
       },
       player2: {
         id: "player2",
@@ -137,15 +132,17 @@ export const initializeGame = (): GameState => {
         money: 0,
         base: {
           health: 20,
-          position: { x: 11, y: 6 },
+          position: { row: 4, col: 4 },
         },
+        units: createInitialUnits("player2"),
       },
     },
-    board: createInitialUnits(),
     currentTurn: "player1",
     shop: SHOP_CARDS,
     selectedCards: [],
     selectedShopCard: null,
+    selectedUnit: null,
+    selectedMoveCards: [],
   };
 };
 
@@ -270,5 +267,142 @@ export const purchaseCard = (gameState: GameState): GameState => {
     },
     selectedCards: [],
     selectedShopCard: null,
+  };
+};
+
+export const selectUnit = (
+  gameState: GameState,
+  position: Position,
+  type: "miner" | "soldier"
+): GameState => {
+  const currentPlayer = gameState.players[gameState.currentTurn];
+  const unit = currentPlayer.units.find(
+    (u) =>
+      u.position.row === position.row &&
+      u.position.col === position.col &&
+      u.type === type
+  );
+
+  if (!unit) {
+    return gameState;
+  }
+
+  return {
+    ...gameState,
+    selectedUnit: { position, type },
+  };
+};
+
+export const deselectUnit = (gameState: GameState): GameState => {
+  return {
+    ...gameState,
+    selectedUnit: null,
+  };
+};
+
+export const selectMoveCard = (gameState: GameState, card: Card): GameState => {
+  if (card.type !== "move") {
+    return gameState;
+  }
+
+  const isAlreadySelected = gameState.selectedMoveCards.some(
+    (c) => c.id === card.id
+  );
+
+  if (isAlreadySelected) {
+    return {
+      ...gameState,
+      selectedMoveCards: gameState.selectedMoveCards.filter(
+        (c) => c.id !== card.id
+      ),
+    };
+  }
+
+  return {
+    ...gameState,
+    selectedMoveCards: [...gameState.selectedMoveCards, card],
+  };
+};
+
+export const moveUnit = (
+  gameState: GameState,
+  targetPosition: Position
+): GameState => {
+  if (!gameState.selectedUnit || gameState.selectedMoveCards.length === 0) {
+    return gameState;
+  }
+
+  const currentPlayer = gameState.players[gameState.currentTurn];
+  const unitIndex = currentPlayer.units.findIndex(
+    (u) =>
+      u.position.row === gameState.selectedUnit!.position.row &&
+      u.position.col === gameState.selectedUnit!.position.col &&
+      u.type === gameState.selectedUnit!.type
+  );
+
+  if (unitIndex === -1) {
+    return gameState;
+  }
+
+  // Check if target position is valid (within bounds and not occupied)
+  if (
+    targetPosition.row < 0 ||
+    targetPosition.row >= 5 ||
+    targetPosition.col < 0 ||
+    targetPosition.col >= 5 ||
+    currentPlayer.units.some(
+      (u) =>
+        u.position.row === targetPosition.row &&
+        u.position.col === targetPosition.col
+    )
+  ) {
+    return gameState;
+  }
+
+  // Move the unit
+  const updatedUnits = [...currentPlayer.units];
+  updatedUnits[unitIndex] = {
+    ...updatedUnits[unitIndex],
+    position: targetPosition,
+  };
+
+  // Remove one move card from hand
+  const moveCardId = gameState.selectedMoveCards[0].id;
+  const updatedHand = currentPlayer.hand.filter(
+    (card) => card.id !== moveCardId
+  );
+  const updatedDiscarded = [
+    ...currentPlayer.discarded,
+    gameState.selectedMoveCards[0],
+  ];
+
+  // Update player state
+  const updatedPlayer = {
+    ...currentPlayer,
+    units: updatedUnits,
+    hand: updatedHand,
+    discarded: updatedDiscarded,
+  };
+
+  return {
+    ...gameState,
+    players: {
+      ...gameState.players,
+      [gameState.currentTurn]: updatedPlayer,
+    },
+    selectedUnit: null,
+    selectedMoveCards: [],
+  };
+};
+
+export const deselectMoveCard = (
+  gameState: GameState,
+  card: Card
+): GameState => {
+  return {
+    ...gameState,
+    selectedMoveCards: gameState.selectedMoveCards.filter(
+      (c) => c.id !== card.id
+    ),
   };
 };
